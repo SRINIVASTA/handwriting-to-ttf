@@ -1,0 +1,7 @@
+streamlit
+fpdf2
+pdf2image
+opencv-python-headless
+numpy
+Pillow
+fonttools
