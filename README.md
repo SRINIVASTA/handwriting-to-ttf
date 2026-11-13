@@ -149,3 +149,13 @@ This repository is licensed under the [MIT License](LICENSE) — Copyright (c) 2
 ## Disclaimer
 
 This project is intended for personal typography, creative design, and educational projects. Users are responsible for ensuring they have permission before digitizing another person's handwriting into a font.
+
+## ⭐ Support & Contribution
+
+If you clone, test, or build upon this repository, please consider giving it a **Star (⭐)** on GitHub—it helps others discover the project and supports continued development.
+
+* **Found a bug or have an idea?** Open an [Issue](https://github.com).
+* **Want to improve the code?** Feel free to **Fork** this repository and submit a Pull Request.
+Use code with caution.
+Would you like me to paste the entire complete README.md from top to bottom with everything already in the exact right order so you can copy-paste the whole file at once?
+
