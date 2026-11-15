@@ -8,6 +8,13 @@ Handwriting to TTF provides a lightweight, local-first pipeline for generating p
 
 Built and maintained by [T A Srinivas (@SRINIVASTA)](https://github.com), this repository hosts a Streamlit web gateway, an exact-scale A4 template generator, a 4-point corner marker perspective scanner, a binary glyph slicer, and a vector TrueType font compiler.
 
+### ⭐ Show Your Support
+
+If you clone, test, or build upon **Handwriting to TTF**, please consider giving this repository a **Star ⭐** on GitHub—it helps others discover the project and supports continued development!
+
+<img src="assets/desktop.png" width="100%" alt="Handwriting to TTF Desktop Preview">
+
+
 <img src="assets/desktop.png" width="100%">
 
 ## Modules in this repo
