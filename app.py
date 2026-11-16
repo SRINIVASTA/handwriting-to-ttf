@@ -14,56 +14,71 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Ensure sample templates exist on startup
+# Ensure samples directory and blank templates exist on startup
+os.makedirs("samples", exist_ok=True)
 PNG_TEMPLATE = "samples/blank_template.png"
 PDF_TEMPLATE = "samples/blank_template.pdf"
+
 if not os.path.exists(PNG_TEMPLATE):
     generate_template_png(PNG_TEMPLATE)
 if not os.path.exists(PDF_TEMPLATE):
     generate_template_pdf(PNG_TEMPLATE, PDF_TEMPLATE)
 
+with open(PDF_TEMPLATE, "rb") as f:
+    PDF_BYTES = f.read()
+with open(PNG_TEMPLATE, "rb") as f:
+    PNG_BYTES = f.read()
+
 # ==========================================
-# SIDEBAR: TEMPLATE DOWNLOADS, NAME & UPLOAD
+# SIDEBAR: QUICK CONTROLS & VISIBILITY GUIDE
 # ==========================================
 with st.sidebar:
     st.title("✒️ Handwriting to TTF")
     st.caption("Local TrueType Font Compiler")
     st.divider()
 
-    # --- STEP 1: DOWNLOAD TEMPLATE ---
-    st.subheader("1. Download Template")
-    with open(PDF_TEMPLATE, "rb") as f:
-        st.download_button(
-            label="📄 Printable A4 PDF",
-            data=f.read(),
-            file_name="blank_template.pdf",
-            mime="application/pdf",
-            use_container_width=True,
-        )
-
-    with open(PNG_TEMPLATE, "rb") as f:
-        st.download_button(
-            label="📱 Tablet / Stylus PNG",
-            data=f.read(),
-            file_name="blank_template.png",
-            mime="image/png",
-            use_container_width=True,
-        )
+    st.subheader("1. Download Blank Template")
+    st.download_button(
+        label="📄 Download A4 PDF Template",
+        data=PDF_BYTES,
+        file_name="blank_template.pdf",
+        mime="application/pdf",
+        use_container_width=True,
+        key="sb_pdf_dl",
+    )
+    st.download_button(
+        label="📱 Download Tablet PNG Template",
+        data=PNG_BYTES,
+        file_name="blank_template.png",
+        mime="image/png",
+        use_container_width=True,
+        key="sb_png_dl",
+    )
 
     st.divider()
 
-    # --- STEP 2: FONT NAME & UPLOAD ---
-    st.subheader("2. Name & Upload Scan")
+    st.subheader("2. Required Font / User Name")
     user_name = st.text_input(
-        "Font / Creator Name",
-        value="MyName",
+        "Enter User Name (Required) *",
+        value="",
+        placeholder="e.g., Srinivas",
         max_chars=40,
-    )
-    preview_filename = f"{sanitize_font_name(user_name)}-Handwriting.ttf"
-    st.caption(f"Target file: **`{preview_filename}`**")
+        help="Required to name your font file and embed font metadata.",
+    ).strip()
 
+    sanitized_name = sanitize_font_name(user_name) if user_name else ""
+    is_valid_name = bool(sanitized_name)
+
+    if is_valid_name:
+        st.caption(f"Output file: **`{sanitized_name}-Handwriting.ttf`**")
+    else:
+        st.warning("⚠️ Please enter your **User Name** to enable font generation.")
+
+    st.divider()
+
+    st.subheader("3. Upload Filled Sheet")
     uploaded_file = st.file_uploader(
-        "Upload filled sheet (PDF, JPG, PNG)",
+        "Upload scan or photo (PDF, JPG, PNG)",
         type=["pdf", "jpg", "jpeg", "png"],
     )
 
@@ -71,50 +86,99 @@ with st.sidebar:
         "🚀 Generate .TTF Font",
         type="primary",
         use_container_width=True,
-        disabled=(uploaded_file is None),
+        disabled=(uploaded_file is None or not is_valid_name),
     )
 
     st.divider()
-    with st.expander("✍️ Writing Tips"):
+    with st.expander("📐 100% Clarity & Visibility Guide", expanded=True):
         st.markdown(
-            "- Use a **dark black pen**.\n"
-            "- Rest letters on the **dashed line**.\n"
-            "- Keep all **4 corner dots** visible."
+            "- **100% Corner Visibility:** Keep all **4 corner bullseye markers** completely inside the photo frame.\n"
+            "- **80%–95% Frame Fill:** Fill most of the camera frame with even lighting and zero shadows.\n"
+            "- **50%–75% Cell Height:** Write each letter large enough to fill half to three-quarters of its box on the dashed baseline.\n"
+            "- **100% Inside Borders:** Keep ascenders and descenders inside the cell lines so they are not sliced off.\n"
+            "- **Bold Black Ink:** Use a **0.7 mm – 1.0 mm black pen** (or thick stylus brush) for clean stroke detection."
         )
 
 # ==========================================
-# MAIN WORKSPACE: PREVIEW, METRICS & EXPORT
+# MAIN WORKSPACE: TEMPLATE, NAME & PREVIEW
 # ==========================================
 st.header("Custom TrueType (.TTF) Font Studio")
 
-if uploaded_file is None:
-    st.info("👈 Start in the sidebar: download a blank template, fill it out, enter your name, and upload your scan.")
+# Always-visible Step 1 & Step 2 bar in the main workspace
+top_col1, top_col2 = st.columns([1.2, 1])
 
+with top_col1:
+    st.subheader("Step 1: Get Your Blank Template")
+    st.write("Print the **A4 PDF** at **100% Actual Size** (disable Fit-to-Page) or draw directly on the **300 DPI PNG**.")
+    dl_c1, dl_c2 = st.columns(2)
+    with dl_c1:
+        st.download_button(
+            label="📄 Download A4 PDF",
+            data=PDF_BYTES,
+            file_name="blank_template.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+            key="main_pdf_dl",
+        )
+    with dl_c2:
+        st.download_button(
+            label="📱 Download 300 DPI PNG",
+            data=PNG_BYTES,
+            file_name="blank_template.png",
+            mime="image/png",
+            use_container_width=True,
+            key="main_png_dl",
+        )
+
+with top_col2:
+    st.subheader("Step 2: Font Status")
+    if not is_valid_name:
+        st.error("1️⃣ **User Name Required:** Enter your name in the sidebar before generating your font.")
+    else:
+        st.success(f"1️⃣ **User Name:** `{sanitized_name}` (`{sanitized_name}-Handwriting.ttf`)")
+
+    if uploaded_file is None:
+        st.info("2️⃣ **Scan Needed:** Upload your completed sheet in the sidebar.")
+    else:
+        st.success(f"2️⃣ **File Ready:** `{uploaded_file.name}`")
+
+st.divider()
+
+if uploaded_file is None or not is_valid_name:
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown("### Step 1: Print or Draw")
-        st.write("Download the **A4 PDF** to write on paper with a black pen, or use the **PNG** on a tablet.")
+        st.markdown("### 1. Print or Draw")
+        st.write("Download the **A4 PDF** to write on paper with a bold black pen, or use the **PNG** on a tablet.")
     with col2:
-        st.markdown("### Step 2: Scan & Upload")
-        st.write("Take a clear photo or scan keeping all four corner bullseyes visible, then upload it on the left.")
+        st.markdown("### 2. Keep 100% Visible")
+        st.write("Ensure all **4 corner bullseyes** are visible and letters fill **50%–75%** of each box height.")
     with col3:
-        st.markdown("### Step 3: Test & Install")
-        st.write("Preview your live handwriting right in the browser and download your installable `.ttf` font.")
+        st.markdown("### 3. Enter Name & Compile")
+        st.write("Type your **User Name** in the sidebar, upload your scan, and download your `.ttf` font.")
 
 else:
-    # Run compilation automatically on upload or when button is clicked
-    if generate_clicked or "compiled_ttf" not in st.session_state or st.session_state.get("last_file") != uploaded_file.name or st.session_state.get("last_name") != user_name:
-        with st.spinner("Aligning page, isolating strokes, and compiling vector glyphs..."):
+    should_compile = (
+        generate_clicked
+        or "compiled_ttf" not in st.session_state
+        or st.session_state.get("last_file") != uploaded_file.name
+        or st.session_state.get("last_name") != sanitized_name
+    )
+
+    if should_compile:
+        with st.spinner("Aligning 4 corner markers, isolating pen strokes, and compiling vector glyphs..."):
             try:
-                file_bytes = uploaded_file.read()
+                file_bytes = uploaded_file.getvalue()
                 cleaned_sheet = scan_and_clean_sheet(file_bytes, uploaded_file.name)
                 glyph_masks = slice_glyphs(cleaned_sheet)
 
                 if not glyph_masks:
-                    st.error("No handwriting strokes detected. Ensure a dark pen was used and all 4 corner markers are visible.")
+                    st.error(
+                        "No handwriting strokes detected. Make sure a dark black pen was used "
+                        "and all 4 corner registration markers are 100% visible."
+                    )
                     st.session_state.pop("compiled_ttf", None)
                 else:
-                    ttf_path = compile_ttf(glyph_masks, user_name=user_name)
+                    ttf_path = compile_ttf(glyph_masks, user_name=sanitized_name)
                     with open(ttf_path, "rb") as ttf_file:
                         ttf_bytes = ttf_file.read()
 
@@ -125,7 +189,7 @@ else:
                         "glyph_masks": glyph_masks,
                     }
                     st.session_state["last_file"] = uploaded_file.name
-                    st.session_state["last_name"] = user_name
+                    st.session_state["last_name"] = sanitized_name
             except Exception as exc:
                 st.error(f"Processing failed: {exc}")
 
@@ -133,11 +197,21 @@ else:
     if "compiled_ttf" in st.session_state:
         result = st.session_state["compiled_ttf"]
         glyph_masks = result["glyph_masks"]
+        captured_count = len(glyph_masks)
+        coverage_pct = round((captured_count / 88) * 100, 1)
 
-        m1, m2, m3 = st.columns(3)
+        m1, m2, m3, m4 = st.columns(4)
         m1.metric("Output Font", result["filename"])
-        m2.metric("Captured Glyphs", f"{len(glyph_masks)} / 88")
-        m3.metric("File Size", f"{len(result['bytes']) / 1024:.1f} KB")
+        m2.metric("Captured Glyphs", f"{captured_count} / 88")
+        m3.metric("Character Coverage", f"{coverage_pct}%")
+        m4.metric("File Size", f"{len(result['bytes']) / 1024:.1f} KB")
+
+        if captured_count < 88:
+            st.warning(
+                f"⚠️ **{88 - captured_count} character(s) were not detected.** "
+                "Check the **Inspect Extracted Pen Strokes** grid below. For missing letters, write slightly larger "
+                "(**50%–75%** of cell height) with a bolder black pen and verify all **4 corner markers** are 100% visible."
+            )
 
         st.download_button(
             label=f"⬇️ Download {result['filename']}",
