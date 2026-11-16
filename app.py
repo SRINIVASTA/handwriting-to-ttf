@@ -356,58 +356,57 @@ else:
                      "bold_bytes": bold_bytes,
                      "glyph_masks": glyph_masks,
                  }
-     st.divider()
-     st.subheader("✉️ Print a Sample Letter (Regular & Bold)")
-     l_col1, l_col2 = st.columns([1.1, 1.3])
+        st.divider()
+        st.subheader("✉️ Print a Sample Letter (Regular & Bold)")
+        l_col1, l_col2 = st.columns([1.1, 1.3])
 
-     default_letter = (
-         f"**Date:** November 16, 2026\n\n"
-         f"**Dear Partner,**\n\n"
-         f"This letter is printed using my **custom enterprise handwriting font**. "
-         f"Both **Regular** and **Bold** styles are compiled directly from my own strokes.\n\n"
-         f"**Best regards,**\n"
-         f"**{sanitized_name}**"
-     )
+        default_letter = (
+            f"**Date:** November 16, 2026\n\n"
+            f"**Dear Partner,**\n\n"
+            f"This letter is printed using my **custom enterprise handwriting font**. "
+            f"Both **Regular** and **Bold** styles are compiled directly from my own strokes.\n\n"
+            f"**Best regards,**\n"
+            f"**{sanitized_name}**"
+        )
 
-     with l_col1:
-         letter_text = st.text_area("Letter Content (**text** = Bold):", value=default_letter, height=260)
-         letter_size = st.slider("Letter Size (px)", min_value=20, max_value=44, value=26)
+        with l_col1:
+            letter_text = st.text_area("Letter Content (**text** = Bold):", value=default_letter, height=260)
+            letter_size = st.slider("Letter Size (px)", min_value=20, max_value=44, value=26)
 
-     letter_html = render_letter_html(
-         letter_text=letter_text,
-         user_name=sanitized_name,
-         reg_bytes=result["reg_bytes"],
-         bold_bytes=result["bold_bytes"],
-         font_size_px=letter_size,
-     )
+        letter_html = render_letter_html(
+            letter_text=letter_text,
+            user_name=sanitized_name,
+            reg_bytes=result["reg_bytes"],
+            bold_bytes=result["bold_bytes"],
+            font_size_px=letter_size,
+        )
 
-     pdf_out_path = os.path.join("output_fonts", f"{sanitized_name}-Letter.pdf")
-     export_letter_pdf(
-         letter_text=letter_text,
-         reg_ttf_path=result["reg_path"],
-         bold_ttf_path=result["bold_path"],
-         output_pdf_path=pdf_out_path,
-     )
-     with open(pdf_out_path, "rb") as pdf_f:
-         letter_pdf_bytes = pdf_f.read()
+        pdf_out_path = os.path.join("output_fonts", f"{sanitized_name}-Letter.pdf")
+        export_letter_pdf(
+            letter_text=letter_text,
+            reg_ttf_path=result["reg_path"],
+            bold_ttf_path=result["bold_path"],
+            output_pdf_path=pdf_out_path,
+        )
+        with open(pdf_out_path, "rb") as pdf_f:
+            letter_pdf_bytes = pdf_f.read()
 
-     with l_col2:
-         st.components.v1.html(letter_html, height=340, scrolling=True)
-         dl_l1, dl_l2 = st.columns(2)
-         with dl_l1:
-             st.download_button(
-                 label="🖨️ Download Printable HTML",
-                 data=letter_html.encode("utf-8"),
-                 file_name=f"{sanitized_name}-Letter.html",
-                 mime="text/html",
-                 use_container_width=True,
-             )
-         with dl_l2:
-             st.download_button(
-                 label="📄 Download Ready-to-Print PDF",
-                 data=letter_pdf_bytes,
-                 file_name=f"{sanitized_name}-Letter.pdf",
-                 mime="application/pdf",
-                 use_container_width=True,
-             )
-
+        with l_col2:
+            st.components.v1.html(letter_html, height=340, scrolling=True)
+            dl_l1, dl_l2 = st.columns(2)
+            with dl_l1:
+                st.download_button(
+                    label="🖨️ Download Printable HTML",
+                    data=letter_html.encode("utf-8"),
+                    file_name=f"{sanitized_name}-Letter.html",
+                    mime="text/html",
+                    use_container_width=True,
+                )
+            with dl_l2:
+                st.download_button(
+                    label="📄 Download Ready-to-Print PDF",
+                    data=letter_pdf_bytes,
+                    file_name=f"{sanitized_name}-Letter.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
