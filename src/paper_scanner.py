@@ -120,7 +120,13 @@ def scan_and_clean_sheet(file_bytes: bytes, filename: str) -> np.ndarray:
         matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
         warped = cv2.warpPerspective(gray, matrix, (CANVAS_WIDTH, CANVAS_HEIGHT))
     else:
-        # Fallback for digital tablet templates where full canvas was uploaded directly
+        # Only allow direct resize if the image already has A4 proportions (e.g., tablet PNG)
+        h, w = gray.shape
+        aspect_ratio = w / float(h)
+        if not (0.68 <= aspect_ratio <= 0.74):
+            raise ValueError(
+                "Could not detect all 4 corner markers. Make sure all 4 corner circles are 100% visible in the photo."
+            )
         warped = cv2.resize(gray, (CANVAS_WIDTH, CANVAS_HEIGHT), interpolation=cv2.INTER_CUBIC)
 
     # Illumination normalization: divide image by wide smoothed background to eliminate shadows
