@@ -83,7 +83,7 @@ def generate_template_png(
         y1 = int(y0 + cell_h)
 
         # Outer cell border
-        draw.rectangle([x0, y0, x1, y1], outline="#94A3B8", width=3)
+        draw.rectangle([x0, y0, x1, y1], outline="#CBD5E1", width=2)
 
         # Label header background
         draw.rectangle([x0 + 2, y0 + 2, x1 - 2, y0 + header_band], fill="#F1F5F9")
