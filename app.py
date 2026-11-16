@@ -7,6 +7,7 @@ from src.template_generator import generate_all_templates
 from src.paper_scanner import scan_and_clean_sheet
 from src.glyph_slicer import slice_glyphs
 from src.ttf_compiler import compile_font_family, sanitize_font_name
+from src.letter_printer import render_letter_html, export_letter_pdf
 
 st.set_page_config(
     page_title="Handwriting to TTF Font Generator",
@@ -345,3 +346,68 @@ else:
                 for idx, ch in enumerate(chars[row_start : row_start + cols_per_row]):
                     inv_preview = cv2.bitwise_not(glyph_masks[ch])
                     cols[idx].image(inv_preview, caption=ch, use_container_width=True)
+
+                 st.session_state["compiled_ttf"] = {
+                     "reg_path": paths["regular"],
+                     "bold_path": paths["bold"],
+                     "reg_filename": os.path.basename(paths["regular"]),
+                     "reg_bytes": reg_bytes,
+                     "bold_filename": os.path.basename(paths["bold"]),
+                     "bold_bytes": bold_bytes,
+                     "glyph_masks": glyph_masks,
+                 }
+     st.divider()
+     st.subheader("✉️ Print a Sample Letter (Regular & Bold)")
+     l_col1, l_col2 = st.columns([1.1, 1.3])
+
+     default_letter = (
+         f"**Date:** November 16, 2026\n\n"
+         f"**Dear Partner,**\n\n"
+         f"This letter is printed using my **custom enterprise handwriting font**. "
+         f"Both **Regular** and **Bold** styles are compiled directly from my own strokes.\n\n"
+         f"**Best regards,**\n"
+         f"**{sanitized_name}**"
+     )
+
+     with l_col1:
+         letter_text = st.text_area("Letter Content (**text** = Bold):", value=default_letter, height=260)
+         letter_size = st.slider("Letter Size (px)", min_value=20, max_value=44, value=26)
+
+     letter_html = render_letter_html(
+         letter_text=letter_text,
+         user_name=sanitized_name,
+         reg_bytes=result["reg_bytes"],
+         bold_bytes=result["bold_bytes"],
+         font_size_px=letter_size,
+     )
+
+     pdf_out_path = os.path.join("output_fonts", f"{sanitized_name}-Letter.pdf")
+     export_letter_pdf(
+         letter_text=letter_text,
+         reg_ttf_path=result["reg_path"],
+         bold_ttf_path=result["bold_path"],
+         output_pdf_path=pdf_out_path,
+     )
+     with open(pdf_out_path, "rb") as pdf_f:
+         letter_pdf_bytes = pdf_f.read()
+
+     with l_col2:
+         st.components.v1.html(letter_html, height=340, scrolling=True)
+         dl_l1, dl_l2 = st.columns(2)
+         with dl_l1:
+             st.download_button(
+                 label="🖨️ Download Printable HTML",
+                 data=letter_html.encode("utf-8"),
+                 file_name=f"{sanitized_name}-Letter.html",
+                 mime="text/html",
+                 use_container_width=True,
+             )
+         with dl_l2:
+             st.download_button(
+                 label="📄 Download Ready-to-Print PDF",
+                 data=letter_pdf_bytes,
+                 file_name=f"{sanitized_name}-Letter.pdf",
+                 mime="application/pdf",
+                 use_container_width=True,
+             )
+
