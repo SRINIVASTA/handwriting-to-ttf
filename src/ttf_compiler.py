@@ -109,7 +109,7 @@ def compile_ttf(
                     fy = int(round((baseline_px - py) * scale))
                     font_pts.append((fx, fy))
 
-                pen.moveTo(font_pts)
+                pen.moveTo(font_pts[0])
                 for pt in font_pts[1:]:
                     pen.lineTo(pt)
                 pen.closePath()
