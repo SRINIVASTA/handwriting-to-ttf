@@ -93,7 +93,7 @@ def export_letter_pdf(
     reg_ttf_path: str,
     bold_ttf_path: str,
     output_pdf_path: str,
-    font_size_pt: int = 18,
+    font_size_pt: int = 15,
 ) -> str:
     """
     Exports an A4 PDF letter directly using the compiled Regular and Bold .ttf files.
@@ -102,8 +102,8 @@ def export_letter_pdf(
     os.makedirs(os.path.dirname(output_pdf_path) or ".", exist_ok=True)
 
     pdf = FPDF(orientation="P", unit="mm", format="A4")
-    pdf.set_margins(left=20, top=20, right=20)
-    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.set_margins(left=18, top=18, right=18)
+    pdf.set_auto_page_break(auto=True, margin=18)
     pdf.add_page()
 
     pdf.add_font("CustomHW", style="", fname=reg_ttf_path)
@@ -111,10 +111,18 @@ def export_letter_pdf(
     pdf.set_font("CustomHW", size=font_size_pt)
 
     for paragraph in letter_text.split("\n"):
+        pdf.set_x(pdf.l_margin)
         if not paragraph.strip():
-            pdf.ln(8)
+            pdf.ln(7)
         else:
-            pdf.multi_cell(w=0, h=10, text=paragraph, markdown=True)
+            pdf.multi_cell(
+                w=pdf.epw,
+                h=9,
+                text=paragraph,
+                markdown=True,
+                new_x="LMARGIN",
+                new_y="NEXT",
+            )
 
     pdf.output(output_pdf_path)
     return output_pdf_path
