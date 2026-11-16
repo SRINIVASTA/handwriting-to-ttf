@@ -16,7 +16,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Ensure samples directory, blank templates, and filled example templates exist on startup
 os.makedirs("samples", exist_ok=True)
 PNG_TEMPLATE = "samples/blank_template.png"
 PDF_TEMPLATE = "samples/blank_template.pdf"
@@ -33,9 +32,6 @@ with open(PNG_TEMPLATE, "rb") as f:
 with open(FILLED_PDF, "rb") as f:
     FILLED_PDF_BYTES = f.read()
 
-# ==========================================
-# SIDEBAR: QUICK CONTROLS & VISIBILITY GUIDE
-# ==========================================
 with st.sidebar:
     st.title("✒️ Handwriting to TTF")
     st.caption("Local TrueType Font Compiler")
@@ -113,10 +109,6 @@ with st.sidebar:
             "- **100% Inside Borders:** Keep ascenders and descenders inside the cell lines so they are not sliced off.\n"
             "- **Bold Black Ink:** Use a **0.7 mm – 1.0 mm black pen** (or thick stylus brush) for clean stroke detection."
         )
-
-# ==========================================
-# MAIN WORKSPACE: TEMPLATE, EXAMPLE & PREVIEW
-# ==========================================
 st.header("Custom TrueType (.TTF) Font Studio")
 
 top_col1, top_col2 = st.columns([1.2, 1])
@@ -189,7 +181,7 @@ else:
     should_compile = (
         generate_clicked
         or "compiled_ttf" not in st.session_state
-        or "reg_filename" not in st.session_state["compiled_ttf"]
+        or "reg_path" not in st.session_state["compiled_ttf"]
         or st.session_state.get("last_file") != uploaded_file.name
         or st.session_state.get("last_name") != sanitized_name
     )
@@ -215,6 +207,8 @@ else:
                         bold_bytes = bold_f.read()
 
                     st.session_state["compiled_ttf"] = {
+                        "reg_path": paths["regular"],
+                        "bold_path": paths["bold"],
                         "reg_filename": os.path.basename(paths["regular"]),
                         "reg_bytes": reg_bytes,
                         "bold_filename": os.path.basename(paths["bold"]),
@@ -226,8 +220,7 @@ else:
             except Exception as exc:
                 st.error(f"Processing failed: {exc}")
 
-    # Render compiled Regular + Bold results from session state
-    if "compiled_ttf" in st.session_state and "reg_filename" in st.session_state["compiled_ttf"]:
+    if "compiled_ttf" in st.session_state and "reg_path" in st.session_state["compiled_ttf"]:
         result = st.session_state["compiled_ttf"]
         glyph_masks = result["glyph_masks"]
         captured_count = len(glyph_masks)
@@ -247,7 +240,6 @@ else:
                 "(**50%–75%** of cell height) with a bolder black pen and verify all **4 corner markers** are 100% visible."
             )
 
-        # Side-by-side Download Buttons for Regular & Bold TTFs
         dl_reg, dl_bold = st.columns(2)
         with dl_reg:
             st.download_button(
@@ -270,7 +262,6 @@ else:
 
         st.divider()
 
-        # Live Browser Font Tester for both Regular and Bold
         b64_reg = base64.b64encode(result["reg_bytes"]).decode("utf-8")
         b64_bold = base64.b64encode(result["bold_bytes"]).decode("utf-8")
         st.subheader("Live Handwriting Font Preview (Regular & Bold)")
@@ -336,27 +327,6 @@ else:
         )
 
         st.divider()
-
-        # Extracted Strokes Grid
-        with st.expander("🔍 Inspect Extracted Pen Strokes", expanded=True):
-            chars = list(glyph_masks.keys())
-            cols_per_row = 11
-            for row_start in range(0, len(chars), cols_per_row):
-                cols = st.columns(cols_per_row)
-                for idx, ch in enumerate(chars[row_start : row_start + cols_per_row]):
-                    inv_preview = cv2.bitwise_not(glyph_masks[ch])
-                    cols[idx].image(inv_preview, caption=ch, use_container_width=True)
-
-                 st.session_state["compiled_ttf"] = {
-                     "reg_path": paths["regular"],
-                     "bold_path": paths["bold"],
-                     "reg_filename": os.path.basename(paths["regular"]),
-                     "reg_bytes": reg_bytes,
-                     "bold_filename": os.path.basename(paths["bold"]),
-                     "bold_bytes": bold_bytes,
-                     "glyph_masks": glyph_masks,
-                 }
-        st.divider()
         st.subheader("✉️ Print a Sample Letter (Regular & Bold)")
         l_col1, l_col2 = st.columns([1.1, 1.3])
 
@@ -410,3 +380,14 @@ else:
                     mime="application/pdf",
                     use_container_width=True,
                 )
+
+        st.divider()
+
+        with st.expander("🔍 Inspect Extracted Pen Strokes", expanded=True):
+            chars = list(glyph_masks.keys())
+            cols_per_row = 11
+            for row_start in range(0, len(chars), cols_per_row):
+                cols = st.columns(cols_per_row)
+                for idx, ch in enumerate(chars[row_start : row_start + cols_per_row]):
+                    inv_preview = cv2.bitwise_not(glyph_masks[ch])
+                    cols[idx].image(inv_preview, caption=ch, use_container_width=True)
