@@ -20,25 +20,27 @@ def compile_ttf(
     glyph_masks: dict[str, np.ndarray],
     user_name: str,
     output_dir: str = "output_fonts",
+    bold: bool = False,
 ) -> str:
     """
     Traces OpenCV contours from each glyph mask into TrueType quadratic outlines
-    and exports `<UserName>-Handwriting.ttf`.
+    and exports either `<UserName>-Handwriting.ttf` (Regular) or
+    `<UserName>-Handwriting-Bold.ttf` (Bold).
     """
     os.makedirs(output_dir, exist_ok=True)
     safe_prefix = sanitize_font_name(user_name) or "Custom"
     family_name = f"{safe_prefix} Handwriting"
-    ps_name = f"{safe_prefix}-Handwriting"
+    style_name = "Bold" if bold else "Regular"
+    ps_name = f"{safe_prefix}-Handwriting-Bold" if bold else f"{safe_prefix}-Handwriting"
     output_path = os.path.join(output_dir, f"{ps_name}.ttf")
 
     units_per_em = 1000
     ascender = 800
     descender = -200
-    default_lsb = 45  # Consistent left margin so typed characters do not drift
+    default_lsb = 45
 
     fb = FontBuilder(units_per_em, isTTF=True)
 
-    # Register .notdef, space, and all captured characters
     glyph_order = [".notdef", "space"]
     cmap: dict[int, str] = {32: "space"}
     char_to_gname: dict[str, str] = {}
@@ -63,29 +65,29 @@ def compile_ttf(
 
     space_pen = TTGlyphPen(None)
     glyph_table["space"] = space_pen.glyph()
-    metrics["space"] = (320, 0)
+    metrics["space"] = (350 if bold else 320, 0)
+
+    # Ellipse kernel for smooth, natural bold stroke thickening
+    bold_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
 
     # 2. Convert each binary glyph mask into vector contours
-    for char, mask in glyph_masks.items():
+    for char, raw_mask in glyph_masks.items():
         gname = char_to_gname[char]
+        mask = cv2.dilate(raw_mask, bold_kernel, iterations=1) if bold else raw_mask
         cell_h, cell_w = mask.shape
 
-        # Scale cell height to match font EM box (1000 units)
         scale = units_per_em / float(cell_h)
-        baseline_px = cell_h * 0.72  # Matches dashed baseline on the template
+        baseline_px = cell_h * 0.72
 
-        # Find outer and inner (hole) contours
         contours, _ = cv2.findContours(mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
 
         valid_contours = []
         min_x, max_x = cell_w, 0
 
         for cnt in contours:
-            # Keep small dots (i, j, period, colon, exclamation) while filtering dust
             if cv2.contourArea(cnt) < 4.0:
                 continue
 
-            # Simplify jagged pixel steps into smooth vector polylines
             epsilon = 1.1
             approx = cv2.approxPolyDP(cnt, epsilon, closed=True)
             if len(approx) < 3:
@@ -100,7 +102,6 @@ def compile_ttf(
         pen = TTGlyphPen(None)
 
         if valid_contours and max_x >= min_x:
-            # Normalize horizontal coordinates so every glyph starts cleanly at default_lsb
             for pts in valid_contours:
                 font_pts = []
                 for px, py in pts:
@@ -108,7 +109,7 @@ def compile_ttf(
                     fy = int(round((baseline_px - py) * scale))
                     font_pts.append((fx, fy))
 
-                pen.moveTo(font_pts[0])
+                pen.moveTo(font_pts)
                 for pt in font_pts[1:]:
                     pen.lineTo(pt)
                 pen.closePath()
@@ -127,9 +128,9 @@ def compile_ttf(
     fb.setupNameTable(
         {
             "familyName": family_name,
-            "styleName": "Regular",
+            "styleName": style_name,
             "uniqueFontIdentifier": f"1.000;{ps_name}",
-            "fullName": f"{family_name} Regular",
+            "fullName": f"{family_name} {style_name}",
             "psName": ps_name,
             "version": "Version 1.000",
         }
@@ -139,8 +140,21 @@ def compile_ttf(
         sTypoDescender=descender,
         usWinAscent=ascender,
         usWinDescent=abs(descender),
+        usWeightClass=700 if bold else 400,
+        fsSelection=0x0020 if bold else 0x0040,
     )
     fb.setupPost()
 
     fb.save(output_path)
     return output_path
+
+
+def compile_font_family(
+    glyph_masks: dict[str, np.ndarray],
+    user_name: str,
+    output_dir: str = "output_fonts",
+) -> dict[str, str]:
+    """Compiles both Regular and Bold TrueType fonts and returns their file paths."""
+    regular_path = compile_ttf(glyph_masks, user_name=user_name, output_dir=output_dir, bold=False)
+    bold_path = compile_ttf(glyph_masks, user_name=user_name, output_dir=output_dir, bold=True)
+    return {"regular": regular_path, "bold": bold_path}
