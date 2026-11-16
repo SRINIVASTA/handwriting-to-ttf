@@ -7,7 +7,11 @@ from src.template_generator import generate_all_templates
 from src.paper_scanner import scan_and_clean_sheet
 from src.glyph_slicer import slice_glyphs
 from src.ttf_compiler import compile_font_family, sanitize_font_name
-from src.letter_printer import render_letter_html, export_letter_pdf
+from src.letter_printer import (
+    render_letter_html,
+    export_letter_pdf_bytes,
+    convert_pdf_to_handwriting_bytes,
+)
 
 st.set_page_config(
     page_title="Handwriting to TTF Font Generator",
@@ -327,62 +331,143 @@ else:
         )
 
         st.divider()
-        st.subheader("✉️ Print a Sample Letter (Regular & Bold)")
-        l_col1, l_col2 = st.columns([1.1, 1.3])
+        st.subheader("✉️ Letter & PDF Font Converter Studio")
 
-        default_letter = (
-            f"**Date:** November 16, 2026\n\n"
-            f"**Dear Partner,**\n\n"
-            f"This letter is printed using my **custom enterprise handwriting font**. "
-            f"Both **Regular** and **Bold** styles are compiled directly from my own strokes.\n\n"
-            f"**Best regards,**\n"
-            f"**{sanitized_name}**"
-        )
+        tab_write, tab_convert = st.tabs([
+            "✍️ Write a New Handwritten Letter",
+            "🔄 Convert Existing PDF to My Font (Optional)",
+        ])
 
-        with l_col1:
-            letter_text = st.text_area("Letter Content (**text** = Bold):", value=default_letter, height=260)
-            letter_size = st.slider("Letter Size (px)", min_value=20, max_value=44, value=26)
+        # --- TAB 1: WRITE A NEW HANDWRITTEN LETTER ---
+        with tab_write:
+            l_col1, l_col2 = st.columns([1.1, 1.3])
+            default_letter = (
+                f"**Date:** November 16, 2026\n\n"
+                f"**Dear Partner,**\n\n"
+                f"This letter is printed using my **custom enterprise handwriting font**. "
+                f"Both **Regular** and **Bold** styles are compiled directly from my own strokes.\n\n"
+                f"**Best regards,**\n"
+                f"**{sanitized_name}**"
+            )
 
-        letter_html = render_letter_html(
-            letter_text=letter_text,
-            user_name=sanitized_name,
-            reg_bytes=result["reg_bytes"],
-            bold_bytes=result["bold_bytes"],
-            font_size_px=letter_size,
-        )
-
-        pdf_out_path = os.path.join("output_fonts", f"{sanitized_name}-Letter.pdf")
-        export_letter_pdf(
-            letter_text=letter_text,
-            reg_ttf_path=result["reg_path"],
-            bold_ttf_path=result["bold_path"],
-            output_pdf_path=pdf_out_path,
-        )
-        with open(pdf_out_path, "rb") as pdf_f:
-            letter_pdf_bytes = pdf_f.read()
-
-        with l_col2:
-            st.components.v1.html(letter_html, height=340, scrolling=True)
-            dl_l1, dl_l2 = st.columns(2)
-            with dl_l1:
-                st.download_button(
-                    label="🖨️ Download Printable HTML",
-                    data=letter_html.encode("utf-8"),
-                    file_name=f"{sanitized_name}-Letter.html",
-                    mime="text/html",
-                    use_container_width=True,
+            with l_col1:
+                letter_text = st.text_area(
+                    "Letter Content (**text** = Bold):",
+                    value=default_letter,
+                    height=260,
+                    key="new_letter_text",
                 )
-            with dl_l2:
-                st.download_button(
-                    label="📄 Download Ready-to-Print PDF",
-                    data=letter_pdf_bytes,
-                    file_name=f"{sanitized_name}-Letter.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
+                letter_size = st.slider(
+                    "Letter Size (px)",
+                    min_value=20,
+                    max_value=44,
+                    value=26,
+                    key="new_letter_size",
                 )
+
+            letter_html = render_letter_html(
+                letter_text=letter_text,
+                user_name=sanitized_name,
+                reg_bytes=result["reg_bytes"],
+                bold_bytes=result["bold_bytes"],
+                font_size_px=letter_size,
+            )
+            letter_pdf_bytes = export_letter_pdf_bytes(
+                letter_text=letter_text,
+                reg_ttf_path=result["reg_path"],
+                bold_ttf_path=result["bold_path"],
+                font_size_pt=max(12, int(letter_size * 0.6)),
+            )
+
+            with l_col2:
+                st.components.v1.html(letter_html, height=340, scrolling=True)
+                dl_l1, dl_l2 = st.columns(2)
+                with dl_l1:
+                    st.download_button(
+                        label="🖨️ Download Printable HTML",
+                        data=letter_html.encode("utf-8"),
+                        file_name=f"{sanitized_name}-Letter.html",
+                        mime="text/html",
+                        use_container_width=True,
+                        key="dl_new_letter_html",
+                    )
+                with dl_l2:
+                    st.download_button(
+                        label="📄 Download Ready-to-Print PDF",
+                        data=letter_pdf_bytes,
+                        file_name=f"{sanitized_name}-Letter.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key="dl_new_letter_pdf",
+                    )
+
+        # --- TAB 2: OPTIONAL EXISTING PDF TO HANDWRITING CONVERTER ---
+        with tab_convert:
+            st.write(
+                "Upload any existing PDF document (typed in Arial, Times, Calibri, etc.) "
+                "to rewrite it in **your own handwriting font**."
+            )
+            other_pdf = st.file_uploader(
+                "Upload another PDF to convert (Optional)",
+                type=["pdf"],
+                key="convert_other_pdf",
+            )
+            conv_font_pt = st.slider(
+                "Converted PDF Font Size (pt)",
+                min_value=12,
+                max_value=24,
+                value=15,
+                key="conv_pdf_pt",
+            )
+
+            if other_pdf is not None:
+                try:
+                    extracted_txt, _ = convert_pdf_to_handwriting_bytes(
+                        source_pdf_bytes=other_pdf.getvalue(),
+                        reg_ttf_path=result["reg_path"],
+                        bold_ttf_path=result["bold_path"],
+                        font_size_pt=conv_font_pt,
+                    )
+
+                    c_col1, c_col2 = st.columns([1, 1.3])
+                    with c_col1:
+                        edited_extracted = st.text_area(
+                            "Extracted Text (Optional: wrap words in **bold** before downloading):",
+                            value=extracted_txt,
+                            height=260,
+                            key="edited_extracted_pdf_text",
+                        )
+                        final_conv_pdf = export_letter_pdf_bytes(
+                            letter_text=edited_extracted,
+                            reg_ttf_path=result["reg_path"],
+                            bold_ttf_path=result["bold_path"],
+                            font_size_pt=conv_font_pt,
+                        )
+
+                    with c_col2:
+                        conv_html = render_letter_html(
+                            letter_text=edited_extracted,
+                            user_name=sanitized_name,
+                            reg_bytes=result["reg_bytes"],
+                            bold_bytes=result["bold_bytes"],
+                            font_size_px=int(conv_font_pt * 1.65),
+                        )
+                        st.components.v1.html(conv_html, height=340, scrolling=True)
+                        st.download_button(
+                            label=f"⬇️ Download Converted PDF ({sanitized_name}-{other_pdf.name})",
+                            data=final_conv_pdf,
+                            file_name=f"{sanitized_name}-{other_pdf.name}",
+                            mime="application/pdf",
+                            type="primary",
+                            use_container_width=True,
+                            key="dl_converted_pdf",
+                        )
+                except Exception as conv_err:
+                    st.error(f"Could not convert PDF: {conv_err}")
 
         st.divider()
 
+        # Extracted Strokes Grid
         with st.expander("🔍 Inspect Extracted Pen Strokes", expanded=True):
             chars = list(glyph_masks.keys())
             cols_per_row = 11
