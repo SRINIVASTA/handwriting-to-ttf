@@ -4,9 +4,12 @@ from fpdf import FPDF
 from src import CHARACTERS, GRID_ROWS, GRID_COLS, CANVAS_WIDTH, CANVAS_HEIGHT, MARGIN_PX, MARKER_RADIUS_PX
 
 
-def generate_template_png(output_path: str = "samples/blank_template.png") -> str:
+def generate_template_png(
+    output_path: str = "samples/blank_template.png",
+    user_name: str = "",
+) -> str:
     """Generates a 300 DPI A4 PNG template with 4 registration corner circles and an 11x8 character grid."""
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
     img = Image.new("RGB", (CANVAS_WIDTH, CANVAS_HEIGHT), "white")
     draw = ImageDraw.Draw(img)
@@ -30,24 +33,36 @@ def generate_template_png(output_path: str = "samples/blank_template.png") -> st
 
     # Load clean fallback fonts for instructions and labels
     try:
-        title_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 44)
+        title_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 42)
         label_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 32)
-        sub_font = ImageFont.truetype("DejaVuSans.ttf", 28)
+        sub_font = ImageFont.truetype("DejaVuSans.ttf", 25)
+        name_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 26)
     except IOError:
         title_font = ImageFont.load_default()
         label_font = ImageFont.load_default()
         sub_font = ImageFont.load_default()
+        name_font = ImageFont.load_default()
 
-    # 2. Header Instructions
-    draw.text((220, 95), "HANDWRITING TO TRUETYPE (.TTF) TEMPLATE", fill="black", font=title_font)
+    # 2. Header Instructions & User Name Field
+    draw.text((220, 72), "HANDWRITING TO TRUETYPE (.TTF) TEMPLATE", fill="black", font=title_font)
+
+    name_label = f"User / Font Name: {user_name}" if user_name.strip() else "User / Font Name: ___________________________"
+    draw.text((1680, 82), name_label, fill="#0F172A", font=name_font)
+
     draw.text(
-        (220, 155),
-        "Write each character inside the dashed box using a dark black pen. Keep 4 corner dots visible.",
-        fill="#475569",
+        (220, 132),
+        "1. Use a bold black pen (0.7-1.0 mm) and fill 50%-75% of each box height on the dashed baseline.",
+        fill="#334155",
+        font=sub_font,
+    )
+    draw.text(
+        (220, 168),
+        "2. Keep 100% of letters inside box borders and ensure ALL 4 corner bullseye markers are 100% visible when scanning.",
+        fill="#334155",
         font=sub_font,
     )
 
-    # 3. Grid Layout Geometry
+    # 3. Grid Layout Geometry (identical coordinates so glyph_slicer.py stays 100% aligned)
     grid_left = MARGIN_PX + 40
     grid_right = CANVAS_WIDTH - MARGIN_PX - 40
     grid_top = 240
@@ -91,12 +106,13 @@ def generate_template_png(output_path: str = "samples/blank_template.png") -> st
 def generate_template_pdf(
     png_path: str = "samples/blank_template.png",
     pdf_path: str = "samples/blank_template.pdf",
+    user_name: str = "",
 ) -> str:
     """Wraps the exact-scale 300 DPI PNG into an A4 PDF document (210mm x 297mm)."""
-    if not os.path.exists(png_path):
-        generate_template_png(png_path)
+    if not os.path.exists(png_path) or user_name.strip():
+        generate_template_png(png_path, user_name=user_name)
 
-    os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
+    os.makedirs(os.path.dirname(pdf_path) or ".", exist_ok=True)
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.set_auto_page_break(auto=False)
     pdf.add_page()
