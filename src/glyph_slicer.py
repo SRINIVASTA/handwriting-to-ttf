@@ -19,6 +19,9 @@ def slice_glyphs(cleaned_sheet: np.ndarray) -> dict[str, np.ndarray]:
 
     glyph_masks: dict[str, np.ndarray] = {}
 
+    # Gentle 2x2 kernel preserves thin 0.5mm pen strokes while removing single-pixel noise
+    clean_kernel = np.ones((2, 2), np.uint8)
+
     for idx, char in enumerate(CHARACTERS):
         row = idx // GRID_COLS
         col = idx % GRID_COLS
@@ -32,15 +35,14 @@ def slice_glyphs(cleaned_sheet: np.ndarray) -> dict[str, np.ndarray]:
         pad = 12
         crop = cleaned_sheet[y0 + header_band + pad : y1 - pad, x0 + pad : x1 - pad]
 
-        # Threshold dark pen strokes (ignoring light gray dashed baseline guides)
-        _, binary = cv2.threshold(crop, 145, 255, cv2.THRESH_BINARY_INV)
+        # Threshold dark pen strokes (165 captures medium-dark ink while ignoring #CBD5E1 dashed baseline)
+        _, binary = cv2.threshold(crop, 165, 255, cv2.THRESH_BINARY_INV)
 
-        # Remove tiny speckles / dust noise via morphological opening
-        kernel = np.ones((3, 3), np.uint8)
-        cleaned_ink = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
+        # Remove single-pixel speckles without erasing thin strokes or punctuation dots
+        cleaned_ink = cv2.morphologyEx(binary, cv2.MORPH_OPEN, clean_kernel)
 
-        # Check if user wrote inside this cell (minimum ink pixel threshold)
-        if cv2.countNonZero(cleaned_ink) > 35:
+        # Minimum 12 ink pixels ensures small punctuation (., -, ', :) is retained
+        if cv2.countNonZero(cleaned_ink) >= 12:
             glyph_masks[char] = cleaned_ink
 
     return glyph_masks
