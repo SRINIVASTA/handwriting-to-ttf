@@ -19,7 +19,6 @@ def slice_glyphs(cleaned_sheet: np.ndarray) -> dict[str, np.ndarray]:
 
     glyph_masks: dict[str, np.ndarray] = {}
 
-    # Kernels to remove single-pixel speckles, bridge broken pen lines, and thicken strokes
     open_kernel = np.ones((2, 2), np.uint8)
     close_kernel = np.ones((3, 3), np.uint8)
     dilate_kernel = np.ones((2, 2), np.uint8)
@@ -34,17 +33,17 @@ def slice_glyphs(cleaned_sheet: np.ndarray) -> dict[str, np.ndarray]:
         y1 = int(y0 + cell_h)
 
         # Inset margins to exclude printed cell borders and top label header
-        pad = 12
+        pad = 18
         crop = cleaned_sheet[y0 + header_band + pad : y1 - pad, x0 + pad : x1 - pad]
 
-        # Capture lighter/thinner pen ink (185) while still ignoring #CBD5E1 (~208) dashed baseline
-        _, binary = cv2.threshold(crop, 185, 255, cv2.THRESH_BINARY_INV)
+        # Capture dark pen ink while ignoring light gray (#CBD5E1) borders and dashed baseline
+        _, binary = cv2.threshold(crop, 160, 255, cv2.THRESH_BINARY_INV)
 
-        # 1. Remove isolated 1-pixel dust
+        # 1. Remove isolated 1-pixel speckles
         cleaned = cv2.morphologyEx(binary, cv2.MORPH_OPEN, open_kernel)
         # 2. Bridge tiny gaps inside broken pen strokes
         cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, close_kernel)
-        # 3. Slightly thicken strokes so vector outlines stay solid and legible at all font sizes
+        # 3. Lightly thicken strokes so vector outlines stay solid at all sizes
         cleaned = cv2.dilate(cleaned, dilate_kernel, iterations=1)
 
         if cv2.countNonZero(cleaned) >= 15:
