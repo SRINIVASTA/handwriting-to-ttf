@@ -250,7 +250,6 @@ else:
         dl_reg, dl_bold = st.columns(2)
         with dl_reg:
             st.download_button(
-
                 label=f"⬇️ Download Regular ({result['reg_filename']})",
                 data=result["reg_bytes"],
                 file_name=result["reg_filename"],
