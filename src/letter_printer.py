@@ -5,6 +5,8 @@ import base64
 from io import BytesIO
 from fpdf import FPDF
 from pypdf import PdfReader
+from pdf2image import convert_from_bytes
+import pytesseract
 
 
 def render_letter_html(
@@ -144,14 +146,30 @@ def export_letter_pdf(
 
 
 def extract_text_from_pdf(pdf_bytes: bytes) -> str:
-    """Extracts selectable text from every page of an uploaded PDF document."""
+    """
+    Extracts text from every page of an uploaded PDF document.
+    Uses fast digital extraction first, and automatically falls back to
+    OCR (pdf2image + pytesseract) if the PDF is a scanned image.
+    """
     reader = PdfReader(BytesIO(pdf_bytes))
     pages_text = []
     for page in reader.pages:
         extracted = page.extract_text() or ""
         if extracted.strip():
             pages_text.append(extracted.strip())
-    return "\n\n".join(pages_text)
+
+    if pages_text:
+        return "\n\n".join(pages_text)
+
+    # Fallback: OCR for scanned / image-based PDFs
+    images = convert_from_bytes(pdf_bytes, dpi=200)
+    ocr_pages = []
+    for img in images:
+        ocr_text = pytesseract.image_to_string(img) or ""
+        if ocr_text.strip():
+            ocr_pages.append(ocr_text.strip())
+
+    return "\n\n".join(ocr_pages)
 
 
 def convert_pdf_to_handwriting_bytes(
@@ -161,13 +179,13 @@ def convert_pdf_to_handwriting_bytes(
     font_size_pt: int = 15,
 ) -> tuple[str, bytes]:
     """
-    Extracts text from an existing PDF (written in any standard font) and
-    re-renders it into a new A4 PDF using the user's Regular & Bold handwriting fonts.
+    Extracts text from an existing PDF (digital or scanned) and re-renders it
+    into a new A4 PDF using the user's Regular & Bold handwriting fonts.
     """
     extracted_text = extract_text_from_pdf(source_pdf_bytes)
     if not extracted_text.strip():
         raise ValueError(
-            "No selectable text found in the uploaded PDF. Please upload a text-based PDF."
+            "No readable text could be extracted from the uploaded PDF."
         )
 
     new_pdf_bytes = export_letter_pdf_bytes(
