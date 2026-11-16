@@ -144,9 +144,8 @@ def generate_template_pdf(
     user_name: str = "",
     filled: bool = False,
 ) -> str:
-    """Wraps the exact-scale 300 DPI PNG into an A4 PDF document (210mm x 297mm)."""
-    if not os.path.exists(png_path) or user_name.strip():
-        generate_template_png(png_path, user_name=user_name, filled=filled)
+    """Wraps the exact-scale 300 DPI PNG into a valid A4 PDF document (210mm x 297mm)."""
+    generate_template_png(png_path, user_name=user_name, filled=filled)
 
     os.makedirs(os.path.dirname(pdf_path) or ".", exist_ok=True)
     pdf = FPDF(orientation="P", unit="mm", format="A4")
