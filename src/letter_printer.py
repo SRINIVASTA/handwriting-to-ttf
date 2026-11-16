@@ -2,7 +2,9 @@ import os
 import re
 import html
 import base64
+from io import BytesIO
 from fpdf import FPDF
+from pypdf import PdfReader
 
 
 def render_letter_html(
@@ -88,6 +90,39 @@ def render_letter_html(
     """
 
 
+def export_letter_pdf_bytes(
+    letter_text: str,
+    reg_ttf_path: str,
+    bold_ttf_path: str,
+    font_size_pt: int = 15,
+) -> bytes:
+    """
+    Generates a valid A4 PDF in memory using the compiled Regular and Bold .ttf files.
+    Splits **bold** segments explicitly so FPDF2 embeds both font styles cleanly.
+    """
+    pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.set_margins(left=18, top=18, right=18)
+    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.add_page()
+
+    pdf.add_font("CustomHWReg", style="", fname=reg_ttf_path)
+    pdf.add_font("CustomHWBold", style="", fname=bold_ttf_path)
+    pdf.set_font("CustomHWReg", size=font_size_pt)
+
+    tokens = re.split(r"(\*\*.*?\*\*)", letter_text)
+    for token in tokens:
+        if not token:
+            continue
+        if token.startswith("**") and token.endswith("**") and len(token) > 4:
+            pdf.set_font("CustomHWBold", size=font_size_pt)
+            pdf.write(h=9, text=token[2:-2])
+        else:
+            pdf.set_font("CustomHWReg", size=font_size_pt)
+            pdf.write(h=9, text=token)
+
+    return bytes(pdf.output())
+
+
 def export_letter_pdf(
     letter_text: str,
     reg_ttf_path: str,
@@ -95,34 +130,50 @@ def export_letter_pdf(
     output_pdf_path: str,
     font_size_pt: int = 15,
 ) -> str:
-    """
-    Exports an A4 PDF letter directly using the compiled Regular and Bold .ttf files.
-    Supports **bold** inline segments via FPDF2 markdown parsing.
-    """
+    """Writes the generated A4 PDF bytes to disk and returns the output file path."""
     os.makedirs(os.path.dirname(output_pdf_path) or ".", exist_ok=True)
-
-    pdf = FPDF(orientation="P", unit="mm", format="A4")
-    pdf.set_margins(left=18, top=18, right=18)
-    pdf.set_auto_page_break(auto=True, margin=18)
-    pdf.add_page()
-
-    pdf.add_font("CustomHW", style="", fname=reg_ttf_path)
-    pdf.add_font("CustomHW", style="B", fname=bold_ttf_path)
-    pdf.set_font("CustomHW", size=font_size_pt)
-
-    for paragraph in letter_text.split("\n"):
-        pdf.set_x(pdf.l_margin)
-        if not paragraph.strip():
-            pdf.ln(7)
-        else:
-            pdf.multi_cell(
-                w=pdf.epw,
-                h=9,
-                text=paragraph,
-                markdown=True,
-                new_x="LMARGIN",
-                new_y="NEXT",
-            )
-
-    pdf.output(output_pdf_path)
+    pdf_bytes = export_letter_pdf_bytes(
+        letter_text=letter_text,
+        reg_ttf_path=reg_ttf_path,
+        bold_ttf_path=bold_ttf_path,
+        font_size_pt=font_size_pt,
+    )
+    with open(output_pdf_path, "wb") as f:
+        f.write(pdf_bytes)
     return output_pdf_path
+
+
+def extract_text_from_pdf(pdf_bytes: bytes) -> str:
+    """Extracts selectable text from every page of an uploaded PDF document."""
+    reader = PdfReader(BytesIO(pdf_bytes))
+    pages_text = []
+    for page in reader.pages:
+        extracted = page.extract_text() or ""
+        if extracted.strip():
+            pages_text.append(extracted.strip())
+    return "\n\n".join(pages_text)
+
+
+def convert_pdf_to_handwriting_bytes(
+    source_pdf_bytes: bytes,
+    reg_ttf_path: str,
+    bold_ttf_path: str,
+    font_size_pt: int = 15,
+) -> tuple[str, bytes]:
+    """
+    Extracts text from an existing PDF (written in any standard font) and
+    re-renders it into a new A4 PDF using the user's Regular & Bold handwriting fonts.
+    """
+    extracted_text = extract_text_from_pdf(source_pdf_bytes)
+    if not extracted_text.strip():
+        raise ValueError(
+            "No selectable text found in the uploaded PDF. Please upload a text-based PDF."
+        )
+
+    new_pdf_bytes = export_letter_pdf_bytes(
+        letter_text=extracted_text,
+        reg_ttf_path=reg_ttf_path,
+        bold_ttf_path=bold_ttf_path,
+        font_size_pt=font_size_pt,
+    )
+    return extracted_text, new_pdf_bytes
