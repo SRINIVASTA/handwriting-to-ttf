@@ -22,8 +22,8 @@ PDF_TEMPLATE = "samples/blank_template.pdf"
 FILLED_PNG = "samples/sample_filled_paper.png"
 FILLED_PDF = "samples/sample_filled_paper.pdf"
 
-if not all(os.path.exists(p) for p in [PNG_TEMPLATE, PDF_TEMPLATE, FILLED_PNG, FILLED_PDF]):
-    generate_all_templates()
+
+generate_all_templates()
 
 with open(PDF_TEMPLATE, "rb") as f:
     PDF_BYTES = f.read()
