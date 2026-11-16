@@ -43,8 +43,8 @@ def _find_corner_markers(gray: np.ndarray) -> np.ndarray | None:
         return None
 
     h, w = gray.shape
-    min_area = (w * h) * 0.00015
-    max_area = (w * h) * 0.005
+    min_area = (w * h) * 0.00006
+    max_area = (w * h) * 0.006
 
     candidates = []
     for i, cnt in enumerate(contours):
@@ -59,7 +59,7 @@ def _find_corner_markers(gray: np.ndarray) -> np.ndarray | None:
 
         # Bullseye markers have high circularity and a child inner white circle
         has_child = hierarchy[0][i][2] != -1
-        if circularity > 0.72 and has_child:
+        if circularity > 0.65 and has_child:
             M = cv2.moments(cnt)
             if M["m00"] != 0:
                 cx = M["m10"] / M["m00"]
@@ -69,15 +69,32 @@ def _find_corner_markers(gray: np.ndarray) -> np.ndarray | None:
     if len(candidates) < 4:
         return None
 
-    # Pick the candidate closest to each of the 4 image corners
+    # Assign a unique candidate point to each of the 4 image corners
     img_corners = np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype="float32")
     pts = np.array(candidates, dtype="float32")
     selected = []
+    used_indices = set()
+
     for corner in img_corners:
         dists = np.linalg.norm(pts - corner, axis=1)
-        selected.append(pts[np.argmin(dists)])
+        for idx in np.argsort(dists):
+            if int(idx) not in used_indices:
+                used_indices.add(int(idx))
+                selected.append(pts[idx])
+                break
 
-    return _order_points(np.array(selected, dtype="float32"))
+    if len(selected) < 4:
+        return None
+
+    ordered = _order_points(np.array(selected, dtype="float32"))
+
+    # Sanity check: ensure the detected quadrilateral spans at least 40% of image width & height
+    quad_w = np.linalg.norm(ordered[1] - ordered[0])
+    quad_h = np.linalg.norm(ordered[3] - ordered[0])
+    if quad_w < w * 0.40 or quad_h < h * 0.40:
+        return None
+
+    return ordered
 
 
 def scan_and_clean_sheet(file_bytes: bytes, filename: str) -> np.ndarray:
@@ -106,8 +123,8 @@ def scan_and_clean_sheet(file_bytes: bytes, filename: str) -> np.ndarray:
         # Fallback for digital tablet templates where full canvas was uploaded directly
         warped = cv2.resize(gray, (CANVAS_WIDTH, CANVAS_HEIGHT), interpolation=cv2.INTER_CUBIC)
 
-    # Illumination normalization: divide image by smoothed background to eliminate shadows
-    bg = cv2.GaussianBlur(warped, (91, 91), 0)
+    # Illumination normalization: divide image by wide smoothed background to eliminate shadows
+    bg = cv2.GaussianBlur(warped, (151, 151), 0)
     normalized = cv2.divide(warped, bg, scale=255)
 
     return normalized
