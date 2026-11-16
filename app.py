@@ -2,7 +2,7 @@ import os
 import base64
 import streamlit as st
 import cv2
-from src.template_generator import generate_template_png, generate_template_pdf
+from src.template_generator import generate_all_templates
 from src.paper_scanner import scan_and_clean_sheet
 from src.glyph_slicer import slice_glyphs
 from src.ttf_compiler import compile_ttf, sanitize_font_name
@@ -14,20 +14,22 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Ensure samples directory and blank templates exist on startup
+# Ensure samples directory, blank templates, and filled example templates exist on startup
 os.makedirs("samples", exist_ok=True)
 PNG_TEMPLATE = "samples/blank_template.png"
 PDF_TEMPLATE = "samples/blank_template.pdf"
+FILLED_PNG = "samples/sample_filled_paper.png"
+FILLED_PDF = "samples/sample_filled_paper.pdf"
 
-if not os.path.exists(PNG_TEMPLATE):
-    generate_template_png(PNG_TEMPLATE)
-if not os.path.exists(PDF_TEMPLATE):
-    generate_template_pdf(PNG_TEMPLATE, PDF_TEMPLATE)
+if not all(os.path.exists(p) for p in [PNG_TEMPLATE, PDF_TEMPLATE, FILLED_PNG, FILLED_PDF]):
+    generate_all_templates()
 
 with open(PDF_TEMPLATE, "rb") as f:
     PDF_BYTES = f.read()
 with open(PNG_TEMPLATE, "rb") as f:
     PNG_BYTES = f.read()
+with open(FILLED_PDF, "rb") as f:
+    FILLED_PDF_BYTES = f.read()
 
 # ==========================================
 # SIDEBAR: QUICK CONTROLS & VISIBILITY GUIDE
@@ -53,6 +55,14 @@ with st.sidebar:
         mime="image/png",
         use_container_width=True,
         key="sb_png_dl",
+    )
+    st.download_button(
+        label="📥 Download Filled Example PDF",
+        data=FILLED_PDF_BYTES,
+        file_name="sample_filled_paper.pdf",
+        mime="application/pdf",
+        use_container_width=True,
+        key="sb_filled_dl",
     )
 
     st.divider()
@@ -98,13 +108,11 @@ with st.sidebar:
             "- **100% Inside Borders:** Keep ascenders and descenders inside the cell lines so they are not sliced off.\n"
             "- **Bold Black Ink:** Use a **0.7 mm – 1.0 mm black pen** (or thick stylus brush) for clean stroke detection."
         )
-
 # ==========================================
-# MAIN WORKSPACE: TEMPLATE, NAME & PREVIEW
+# MAIN WORKSPACE: TEMPLATE, EXAMPLE & PREVIEW
 # ==========================================
 st.header("Custom TrueType (.TTF) Font Studio")
 
-# Always-visible Step 1 & Step 2 bar in the main workspace
 top_col1, top_col2 = st.columns([1.2, 1])
 
 with top_col1:
@@ -130,6 +138,21 @@ with top_col1:
             key="main_png_dl",
         )
 
+    with st.expander("👀 See How to Fill the Template (Filled Example Sheet)", expanded=(uploaded_file is None)):
+        st.image(
+            FILLED_PNG,
+            caption="Example: Write every character bold and centered on the dashed baseline, keeping all 4 corner bullseyes visible.",
+            use_container_width=True,
+        )
+        st.download_button(
+            label="📥 Download Filled Example PDF (Reference)",
+            data=FILLED_PDF_BYTES,
+            file_name="sample_filled_paper.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+            key="main_filled_dl",
+        )
+
 with top_col2:
     st.subheader("Step 2: Font Status")
     if not is_valid_name:
@@ -138,7 +161,7 @@ with top_col2:
         st.success(f"1️⃣ **User Name:** `{sanitized_name}` (`{sanitized_name}-Handwriting.ttf`)")
 
     if uploaded_file is None:
-        st.info("2️⃣ **Scan Needed:** Upload your completed sheet in the sidebar.")
+        st.info("2️⃣ **Scan Needed:** Upload your completed sheet in the sidebar (or test with `sample_filled_paper.pdf`).")
     else:
         st.success(f"2️⃣ **File Ready:** `{uploaded_file.name}`")
 
@@ -150,8 +173,8 @@ if uploaded_file is None or not is_valid_name:
         st.markdown("### 1. Print or Draw")
         st.write("Download the **A4 PDF** to write on paper with a bold black pen, or use the **PNG** on a tablet.")
     with col2:
-        st.markdown("### 2. Keep 100% Visible")
-        st.write("Ensure all **4 corner bullseyes** are visible and letters fill **50%–75%** of each box height.")
+        st.markdown("### 2. Follow the Filled Guide")
+        st.write("Match the filled reference above: rest letters on the **dashed line** and keep all **4 corner markers** 100% visible.")
     with col3:
         st.markdown("### 3. Enter Name & Compile")
         st.write("Type your **User Name** in the sidebar, upload your scan, and download your `.ttf` font.")
