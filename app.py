@@ -2,6 +2,7 @@ import os
 import base64
 import streamlit as st
 import cv2
+from src import CHARACTERS
 from src.template_generator import generate_all_templates
 from src.paper_scanner import scan_and_clean_sheet
 from src.glyph_slicer import slice_glyphs
@@ -111,6 +112,7 @@ with st.sidebar:
             "- **100% Inside Borders:** Keep ascenders and descenders inside the cell lines so they are not sliced off.\n"
             "- **Bold Black Ink:** Use a **0.7 mm – 1.0 mm black pen** (or thick stylus brush) for clean stroke detection."
         )
+
 # ==========================================
 # MAIN WORKSPACE: TEMPLATE, EXAMPLE & PREVIEW
 # ==========================================
@@ -186,6 +188,7 @@ else:
     should_compile = (
         generate_clicked
         or "compiled_ttf" not in st.session_state
+        or "reg_filename" not in st.session_state["compiled_ttf"]
         or st.session_state.get("last_file") != uploaded_file.name
         or st.session_state.get("last_name") != sanitized_name
     )
@@ -223,21 +226,22 @@ else:
                 st.error(f"Processing failed: {exc}")
 
     # Render compiled Regular + Bold results from session state
-    if "compiled_ttf" in st.session_state:
+    if "compiled_ttf" in st.session_state and "reg_filename" in st.session_state["compiled_ttf"]:
         result = st.session_state["compiled_ttf"]
         glyph_masks = result["glyph_masks"]
         captured_count = len(glyph_masks)
-        coverage_pct = round((captured_count / 88) * 100, 1)
+        total_chars = len(CHARACTERS)
+        coverage_pct = round((captured_count / total_chars) * 100, 1)
 
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Font Family", f"{sanitized_name} Handwriting")
-        m2.metric("Captured Glyphs", f"{captured_count} / 88")
+        m2.metric("Captured Glyphs", f"{captured_count} / {total_chars}")
         m3.metric("Character Coverage", f"{coverage_pct}%")
         m4.metric("Styles Generated", "Regular & Bold")
 
-        if captured_count < 88:
+        if captured_count < total_chars:
             st.warning(
-                f"⚠️ **{88 - captured_count} character(s) were not detected.** "
+                f"⚠️ **{total_chars - captured_count} character(s) were not detected.** "
                 "Check the **Inspect Extracted Pen Strokes** grid below. For missing letters, write slightly larger "
                 "(**50%–75%** of cell height) with a bolder black pen and verify all **4 corner markers** are 100% visible."
             )
@@ -246,6 +250,7 @@ else:
         dl_reg, dl_bold = st.columns(2)
         with dl_reg:
             st.download_button(
+
                 label=f"⬇️ Download Regular ({result['reg_filename']})",
                 data=result["reg_bytes"],
                 file_name=result["reg_filename"],
