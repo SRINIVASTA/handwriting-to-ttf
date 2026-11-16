@@ -18,36 +18,18 @@ def load_image_from_bytes(file_bytes: bytes, filename: str) -> np.ndarray:
     return img
 
 
-def _order_points(pts: np.ndarray) -> np.ndarray:
-    """Orders 4 points into [top-left, top-right, bottom-right, bottom-left]."""
-    rect = np.zeros((4, 2), dtype="float32")
-    s = pts.sum(axis=1)
-    rect[0] = pts[np.argmin(s)]
-    rect[2] = pts[np.argmax(s)]
-
-    diff = np.diff(pts, axis=1)
-    rect[1] = pts[np.argmin(diff)]
-    rect[3] = pts[np.argmax(diff)]
-    return rect
-
-
 def _find_corner_markers(gray: np.ndarray) -> np.ndarray | None:
-    """Finds the centers of the 4 circular bullseye registration markers."""
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    thresh = cv2.adaptiveThreshold(
-        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 51, 15
-    )
+    """Finds the centers of the 4 circular corner registration markers."""
+    blurred = cv2.GaussianBlur(gray, (7, 7), 0)
+    _, thresh = cv2.threshold(blurred, 110, 255, cv2.THRESH_BINARY_INV)
 
-    contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    if hierarchy is None:
-        return None
-
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     h, w = gray.shape
-    min_area = (w * h) * 0.00006
-    max_area = (w * h) * 0.006
+    min_area = (w * h) * 0.00005
+    max_area = (w * h) * 0.008
 
     candidates = []
-    for i, cnt in enumerate(contours):
+    for cnt in contours:
         area = cv2.contourArea(cnt)
         if not (min_area < area < max_area):
             continue
@@ -57,9 +39,8 @@ def _find_corner_markers(gray: np.ndarray) -> np.ndarray | None:
             continue
         circularity = 4 * np.pi * (area / (perimeter * perimeter))
 
-        # Bullseye markers have high circularity and a child inner white circle
-        has_child = hierarchy[0][i][2] != -1
-        if circularity > 0.65 and has_child:
+        # Accept both solid circles and bullseyes (outer contour is always circular)
+        if circularity > 0.70:
             M = cv2.moments(cnt)
             if M["m00"] != 0:
                 cx = M["m10"] / M["m00"]
@@ -69,32 +50,24 @@ def _find_corner_markers(gray: np.ndarray) -> np.ndarray | None:
     if len(candidates) < 4:
         return None
 
-    # Assign a unique candidate point to each of the 4 image corners
-    img_corners = np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype="float32")
-    pts = np.array(candidates, dtype="float32")
+    # Search strictly inside each corner quadrant (outer 25% of width/height)
+    quadrants = [
+        (0, 0, w * 0.28, h * 0.25, np.array([0, 0])),         # Top-Left
+        (w * 0.72, 0, w, h * 0.25, np.array([w, 0])),         # Top-Right
+        (w * 0.72, h * 0.75, w, h, np.array([w, h])),         # Bottom-Right
+        (0, h * 0.75, w * 0.28, h, np.array([0, h])),         # Bottom-Left
+    ]
+
     selected = []
-    used_indices = set()
+    for x_min, y_min, x_max, y_max, corner_pt in quadrants:
+        q_pts = [p for p in candidates if x_min <= p[0] <= x_max and y_min <= p[1] <= y_max]
+        if not q_pts:
+            return None
+        q_arr = np.array(q_pts, dtype="float32")
+        dists = np.linalg.norm(q_arr - corner_pt, axis=1)
+        selected.append(q_arr[np.argmin(dists)])
 
-    for corner in img_corners:
-        dists = np.linalg.norm(pts - corner, axis=1)
-        for idx in np.argsort(dists):
-            if int(idx) not in used_indices:
-                used_indices.add(int(idx))
-                selected.append(pts[idx])
-                break
-
-    if len(selected) < 4:
-        return None
-
-    ordered = _order_points(np.array(selected, dtype="float32"))
-
-    # Sanity check: ensure the detected quadrilateral spans at least 40% of image width & height
-    quad_w = np.linalg.norm(ordered[1] - ordered[0])
-    quad_h = np.linalg.norm(ordered[3] - ordered[0])
-    if quad_w < w * 0.40 or quad_h < h * 0.40:
-        return None
-
-    return ordered
+    return np.array(selected, dtype="float32")
 
 
 def scan_and_clean_sheet(file_bytes: bytes, filename: str) -> np.ndarray:
@@ -120,7 +93,7 @@ def scan_and_clean_sheet(file_bytes: bytes, filename: str) -> np.ndarray:
         matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
         warped = cv2.warpPerspective(gray, matrix, (CANVAS_WIDTH, CANVAS_HEIGHT))
     else:
-        # Only allow direct resize if the image already has A4 proportions (e.g., tablet PNG)
+        # Fallback for digital tablet templates where full A4 canvas was uploaded directly
         h, w = gray.shape
         aspect_ratio = w / float(h)
         if not (0.68 <= aspect_ratio <= 0.74):
@@ -129,7 +102,7 @@ def scan_and_clean_sheet(file_bytes: bytes, filename: str) -> np.ndarray:
             )
         warped = cv2.resize(gray, (CANVAS_WIDTH, CANVAS_HEIGHT), interpolation=cv2.INTER_CUBIC)
 
-    # Illumination normalization: divide image by wide smoothed background to eliminate shadows
+    # Illumination normalization: divide image by smoothed background to eliminate shadows
     bg = cv2.GaussianBlur(warped, (151, 151), 0)
     normalized = cv2.divide(warped, bg, scale=255)
 
