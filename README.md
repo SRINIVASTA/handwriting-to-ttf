@@ -151,22 +151,20 @@ streamlit run app.py
 
 Open your browser and navigate to `http://localhost:8501`.
 
-## License
 
-This repository is licensed under the [MIT License](LICENSE) — Copyright (c) 2026 [T A Srinivas](https://github.com).
+## ⚠️ Disclaimer & Ethical Typography Governance
 
-## Disclaimer
+This project is an **AI-assisted computer vision and vector typography platform** intended strictly for educational, research, portfolio demonstration, and authorized creative design purposes. Users must only digitize handwriting that they own or for which they hold explicit, verifiable consent. Any unauthorized replication of another individual's handwriting, signature forgery, or deceptive document generation is strictly prohibited.
 
-This project is intended for personal typography, creative design, and educational projects. Users are responsible for ensuring they have permission before digitizing another person's handwriting into a font.
+---
 
-## ⭐ Support & Contribution
+## 🛡️ License, Copyright & Compliance Notices
 
-If you clone, test, or build upon this repository, please consider giving it a **Star (⭐)** on GitHub—it helps others discover the project and supports continued development.
+**All Rights Reserved © 2026 T A Srinivas.**
 
-* **Found a bug or have an idea?** Open an [Issue](https://github.com).
-* **Want to improve the code?** Feel free to **Fork** this repository and submit a Pull Request.
-Use code with caution.
-Would you like me to paste the entire complete README.md from top to bottom with everything already in the exact right order so you can copy-paste the whole file at once?
+> **Strict Intellectual Property Notice:** This repository is strictly for portfolio viewing and technical evaluation purposes. **DO NOT COPY, CLONE, FORK, OR REDISTRIBUTE** this source code, architecture, or documentation. Stolen copies or unauthorized forks will be reported immediately for a **GitHub DMCA copyright takedown**.
+
+For corporate licensing, enterprise deployment, or commercial inquiries, please contact **`tasrinivass@gmail.com`**.
 
 * **Lead Architect & Developer:** [Srinivasta](https://github.com/SRINIVASTA)
 
@@ -177,3 +175,5 @@ Would you like me to paste the entire complete README.md from top to bottom with
 [![Email](https://img.shields.io/badge/Email-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:tasrinivass@gmail.com)
 [![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/srinivasta)
 [![Website](https://img.shields.io/badge/Website-000000?style=for-the-badge&logo=website&logoColor=white)](https://srinivasta.github.io)
+
+💡 Engineered with 4-point perspective transformation, illumination normalization, and quadratic contour vectorization to transform handwritten A4 sheets into installable TrueType fonts.
