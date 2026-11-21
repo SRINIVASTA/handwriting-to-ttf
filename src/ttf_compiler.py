@@ -6,6 +6,9 @@ from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 
 
+NARROW_CHARS = set("il1.,;:'|!`\"()[]{}")
+
+
 def sanitize_font_name(raw_name: str) -> str:
     """Converts user input (e.g. 'T A Srinivas') into a clean filename-safe prefix ('TA-Srinivas')."""
     if not raw_name:
@@ -14,6 +17,17 @@ def sanitize_font_name(raw_name: str) -> str:
     cleaned = re.sub(r"\s+", "-", cleaned)
     cleaned = re.sub(r"-+", "-", cleaned).strip("-")
     return cleaned
+
+
+def _signed_area(pts: list[tuple[int, int]]) -> float:
+    """Computes signed polygon area (positive = counter-clockwise, negative = clockwise)."""
+    area = 0.0
+    n = len(pts)
+    for i in range(n):
+        x1, y1 = pts[i]
+        x2, y2 = pts[(i + 1) % n]
+        area += (x1 * y2) - (x2 * y1)
+    return area / 2.0
 
 
 def compile_ttf(
@@ -37,7 +51,7 @@ def compile_ttf(
     units_per_em = 1000
     ascender = 800
     descender = -200
-    default_lsb = 45
+    default_lsb = 42
 
     fb = FontBuilder(units_per_em, isTTF=True)
 
@@ -79,35 +93,46 @@ def compile_ttf(
         scale = units_per_em / float(cell_h)
         baseline_px = cell_h * 0.72
 
-        contours, _ = cv2.findContours(mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+        contours, hierarchy = cv2.findContours(mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
 
-        valid_contours = []
+        valid_contours: list[tuple[np.ndarray, bool]] = []
         min_x, max_x = cell_w, 0
 
-        for cnt in contours:
-            if cv2.contourArea(cnt) < 4.0:
-                continue
+        if hierarchy is not None:
+            for idx, cnt in enumerate(contours):
+                if cv2.contourArea(cnt) < 4.0:
+                    continue
 
-            epsilon = 1.1
-            approx = cv2.approxPolyDP(cnt, epsilon, closed=True)
-            if len(approx) < 3:
-                continue
+                epsilon = 1.1
+                approx = cv2.approxPolyDP(cnt, epsilon, closed=True)
+                if len(approx) < 3:
+                    continue
 
-            pts = approx.reshape(-1, 2)
-            for px, _ in pts:
-                min_x = min(min_x, px)
-                max_x = max(max_x, px)
-            valid_contours.append(pts)
+                # hierarchy[0][idx][3] != -1 means this contour is an inner hole (e.g., inside 'o', 'e', 'a')
+                is_hole = hierarchy[0][idx][3] != -1
+
+                pts = approx.reshape(-1, 2)
+                for px, _ in pts:
+                    min_x = min(min_x, px)
+                    max_x = max(max_x, px)
+                valid_contours.append((pts, is_hole))
 
         pen = TTGlyphPen(None)
 
         if valid_contours and max_x >= min_x:
-            for pts in valid_contours:
+            lsb = 30 if char in NARROW_CHARS else default_lsb
+
+            for pts, is_hole in valid_contours:
                 font_pts = []
                 for px, py in pts:
-                    fx = int(round((px - min_x) * scale)) + default_lsb
+                    fx = int(round((px - min_x) * scale)) + lsb
                     fy = int(round((baseline_px - py) * scale))
                     font_pts.append((fx, fy))
+
+                # Enforce TrueType winding order: outer strokes clockwise (< 0), holes counter-clockwise (> 0)
+                area = _signed_area(font_pts)
+                if (not is_hole and area > 0) or (is_hole and area < 0):
+                    font_pts.reverse()
 
                 pen.moveTo(font_pts[0])
                 for pt in font_pts[1:]:
@@ -115,9 +140,10 @@ def compile_ttf(
                 pen.closePath()
 
             ink_width = int(round((max_x - min_x) * scale))
-            glyph_width = max(ink_width + (default_lsb * 2), 200)
+            min_width = 140 if char in NARROW_CHARS else 210
+            glyph_width = max(ink_width + (lsb * 2), min_width)
             glyph_table[gname] = pen.glyph()
-            metrics[gname] = (glyph_width, default_lsb)
+            metrics[gname] = (glyph_width, lsb)
         else:
             glyph_table[gname] = empty_pen.glyph()
             metrics[gname] = (400, 0)
