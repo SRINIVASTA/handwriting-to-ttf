@@ -5,7 +5,7 @@ import cv2
 from src import CHARACTERS
 from src.template_generator import generate_all_templates
 from src.paper_scanner import scan_and_clean_sheet
-from src.glyph_slicer import slice_glyphs
+from src.glyph_slicer import slice_glyphs, detect_template_mode
 from src.ttf_compiler import compile_font_family, sanitize_font_name
 from src.letter_printer import (
     render_letter_html,
@@ -20,48 +20,79 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-os.makedirs("samples", exist_ok=True)
-PNG_TEMPLATE = "samples/blank_template.png"
-PDF_TEMPLATE = "samples/blank_template.pdf"
-FILLED_PNG = "samples/sample_filled_paper.png"
-FILLED_PDF = "samples/sample_filled_paper.pdf"
+
+@st.cache_resource
+def _load_template_assets() -> dict[str, dict[str, bytes | str]]:
+    """Generates both Grid and Sentence templates once and caches their bytes."""
+    os.makedirs("samples", exist_ok=True)
+    generate_all_templates()
+
+    assets: dict[str, dict[str, bytes | str]] = {}
+    for mode_key, suffix in [("sentence", "_sentence"), ("grid", "")]:
+        png_path = f"samples/blank_template{suffix}.png"
+        pdf_path = f"samples/blank_template{suffix}.pdf"
+        filled_png_path = f"samples/sample_filled_paper{suffix}.png"
+        filled_pdf_path = f"samples/sample_filled_paper{suffix}.pdf"
+
+        with open(pdf_path, "rb") as f:
+            pdf_bytes = f.read()
+        with open(png_path, "rb") as f:
+            png_bytes = f.read()
+        with open(filled_pdf_path, "rb") as f:
+            filled_pdf_bytes = f.read()
+
+        assets[mode_key] = {
+            "pdf_bytes": pdf_bytes,
+            "png_bytes": png_bytes,
+            "filled_pdf_bytes": filled_pdf_bytes,
+            "filled_png_path": filled_png_path,
+            "pdf_filename": os.path.basename(pdf_path),
+            "png_filename": os.path.basename(png_path),
+            "filled_filename": os.path.basename(filled_pdf_path),
+        }
+    return assets
 
 
-generate_all_templates()
-
-with open(PDF_TEMPLATE, "rb") as f:
-    PDF_BYTES = f.read()
-with open(PNG_TEMPLATE, "rb") as f:
-    PNG_BYTES = f.read()
-with open(FILLED_PDF, "rb") as f:
-    FILLED_PDF_BYTES = f.read()
-
+TEMPLATE_ASSETS = _load_template_assets()
 with st.sidebar:
     st.title("✒️ Handwriting to TTF")
     st.caption("Local TrueType Font Compiler")
     st.divider()
 
-    st.subheader("1. Download Blank Template")
+    st.subheader("1. Choose & Download Template")
+    template_choice = st.radio(
+        "Template Style:",
+        options=["sentence", "grid"],
+        format_func=lambda m: (
+            "✍️ Sentence Flow (Natural Writing)"
+            if m == "sentence"
+            else "🔲 Classic Grid (A–Z Boxes)"
+        ),
+        index=0,
+        help="Sentence Flow captures natural handwriting slant and baseline; Classic Grid isolates each character in boxes.",
+    )
+    active_tpl = TEMPLATE_ASSETS[template_choice]
+
     st.download_button(
         label="📄 Download A4 PDF Template",
-        data=PDF_BYTES,
-        file_name="blank_template.pdf",
+        data=active_tpl["pdf_bytes"],
+        file_name=active_tpl["pdf_filename"],
         mime="application/pdf",
         use_container_width=True,
         key="sb_pdf_dl",
     )
     st.download_button(
         label="📱 Download Tablet PNG Template",
-        data=PNG_BYTES,
-        file_name="blank_template.png",
+        data=active_tpl["png_bytes"],
+        file_name=active_tpl["png_filename"],
         mime="image/png",
         use_container_width=True,
         key="sb_png_dl",
     )
     st.download_button(
         label="📥 Download Filled Example PDF",
-        data=FILLED_PDF_BYTES,
-        file_name="sample_filled_paper.pdf",
+        data=active_tpl["filled_pdf_bytes"],
+        file_name=active_tpl["filled_filename"],
         mime="application/pdf",
         use_container_width=True,
         key="sb_filled_dl",
@@ -95,6 +126,7 @@ with st.sidebar:
     uploaded_file = st.file_uploader(
         "Upload scan or photo (PDF, JPG, PNG)",
         type=["pdf", "jpg", "jpeg", "png"],
+        help="Auto-detects whether you uploaded a Sentence Flow or Classic Grid sheet.",
     )
 
     generate_clicked = st.button(
@@ -109,8 +141,7 @@ with st.sidebar:
         st.markdown(
             "- **100% Corner Visibility:** Keep all **4 corner bullseye markers** completely inside the photo frame.\n"
             "- **80%–95% Frame Fill:** Fill most of the camera frame with even lighting and zero shadows.\n"
-            "- **50%–75% Cell Height:** Write each letter large enough to fill half to three-quarters of its box on the dashed baseline.\n"
-            "- **100% Inside Borders:** Keep ascenders and descenders inside the cell lines so they are not sliced off.\n"
+            "- **50%–75% Height:** Write letters clearly on the dashed baseline without crossing slot/cell borders.\n"
             "- **Bold Black Ink:** Use a **0.7 mm – 1.0 mm black pen** (or thick stylus brush) for clean stroke detection."
         )
 st.header("Custom TrueType (.TTF) Font Studio")
@@ -118,38 +149,42 @@ st.header("Custom TrueType (.TTF) Font Studio")
 top_col1, top_col2 = st.columns([1.2, 1])
 
 with top_col1:
-    st.subheader("Step 1: Get Your Blank Template")
-    st.write("Print the **A4 PDF** at **100% Actual Size** (disable Fit-to-Page) or draw directly on the **300 DPI PNG**.")
+    mode_badge = "Sentence Flow" if template_choice == "sentence" else "Classic Grid"
+    st.subheader(f"Step 1: Get Your Blank Template ({mode_badge})")
+    st.write(
+        "Print the **A4 PDF** at **100% Actual Size** (disable Fit-to-Page) or draw directly on the **300 DPI PNG**. "
+        "Switch between **Sentence Flow** and **Classic Grid** anytime in the sidebar."
+    )
     dl_c1, dl_c2 = st.columns(2)
     with dl_c1:
         st.download_button(
-            label="📄 Download A4 PDF",
-            data=PDF_BYTES,
-            file_name="blank_template.pdf",
+            label=f"📄 Download {mode_badge} PDF",
+            data=active_tpl["pdf_bytes"],
+            file_name=active_tpl["pdf_filename"],
             mime="application/pdf",
             use_container_width=True,
             key="main_pdf_dl",
         )
     with dl_c2:
         st.download_button(
-            label="📱 Download 300 DPI PNG",
-            data=PNG_BYTES,
-            file_name="blank_template.png",
+            label=f"📱 Download {mode_badge} PNG",
+            data=active_tpl["png_bytes"],
+            file_name=active_tpl["png_filename"],
             mime="image/png",
             use_container_width=True,
             key="main_png_dl",
         )
 
-    with st.expander("👀 See How to Fill the Template (Filled Example Sheet)", expanded=(uploaded_file is None)):
+    with st.expander(f"👀 See How to Fill the {mode_badge} Template (Example Sheet)", expanded=(uploaded_file is None)):
         st.image(
-            FILLED_PNG,
+            active_tpl["filled_png_path"],
             caption="Example: Write every character bold and centered on the dashed baseline, keeping all 4 corner bullseyes visible.",
             use_container_width=True,
         )
         st.download_button(
-            label="📥 Download Filled Example PDF (Reference)",
-            data=FILLED_PDF_BYTES,
-            file_name="sample_filled_paper.pdf",
+            label=f"📥 Download {mode_badge} Filled Example PDF",
+            data=active_tpl["filled_pdf_bytes"],
+            file_name=active_tpl["filled_filename"],
             mime="application/pdf",
             use_container_width=True,
             key="main_filled_dl",
@@ -163,7 +198,7 @@ with top_col2:
         st.success(f"1️⃣ **Font Family:** `{sanitized_name} Handwriting` (Regular & Bold)")
 
     if uploaded_file is None:
-        st.info("2️⃣ **Scan Needed:** Upload your completed sheet in the sidebar (or test with `sample_filled_paper.pdf`).")
+        st.info(f"2️⃣ **Scan Needed:** Upload your completed sheet in the sidebar (or test with `{active_tpl['filled_filename']}`).")
     else:
         st.success(f"2️⃣ **File Ready:** `{uploaded_file.name}`")
 
@@ -173,10 +208,10 @@ if uploaded_file is None or not is_valid_name:
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown("### 1. Print or Draw")
-        st.write("Download the **A4 PDF** to write on paper with a bold black pen, or use the **PNG** on a tablet.")
+        st.write("Pick **Sentence Flow** for natural writing rhythm or **Classic Grid** for individual character boxes.")
     with col2:
         st.markdown("### 2. Follow the Filled Guide")
-        st.write("Match the filled reference above: rest letters on the **dashed line** and keep all **4 corner markers** 100% visible.")
+        st.write("Rest letters on the **dashed baseline** and keep all **4 corner markers** 100% visible.")
     with col3:
         st.markdown("### 3. Enter Name & Compile")
         st.write("Type your **User Name** in the sidebar, upload your scan, and download both Regular & Bold `.ttf` fonts.")
@@ -191,11 +226,12 @@ else:
     )
 
     if should_compile:
-        with st.spinner("Aligning 4 corner markers, isolating pen strokes, and compiling Regular & Bold vector glyphs..."):
+        with st.spinner("Aligning 4 corner markers, auto-detecting template mode, and compiling Regular & Bold vector glyphs..."):
             try:
                 file_bytes = uploaded_file.getvalue()
                 cleaned_sheet = scan_and_clean_sheet(file_bytes, uploaded_file.name)
-                glyph_masks = slice_glyphs(cleaned_sheet)
+                detected_mode = detect_template_mode(cleaned_sheet)
+                glyph_masks = slice_glyphs(cleaned_sheet, mode=detected_mode)
 
                 if not glyph_masks:
                     st.error(
@@ -218,30 +254,33 @@ else:
                         "bold_filename": os.path.basename(paths["bold"]),
                         "bold_bytes": bold_bytes,
                         "glyph_masks": glyph_masks,
+                        "detected_mode": detected_mode,
                     }
                     st.session_state["last_file"] = uploaded_file.name
                     st.session_state["last_name"] = sanitized_name
             except Exception as exc:
                 st.error(f"Processing failed: {exc}")
-
     if "compiled_ttf" in st.session_state and "reg_path" in st.session_state["compiled_ttf"]:
         result = st.session_state["compiled_ttf"]
         glyph_masks = result["glyph_masks"]
         captured_count = len(glyph_masks)
         total_chars = len(CHARACTERS)
         coverage_pct = round((captured_count / total_chars) * 100, 1)
+        detected_label = (
+            "Sentence Flow" if result.get("detected_mode") == "sentence" else "Classic Grid"
+        )
 
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Font Family", f"{sanitized_name} Handwriting")
-        m2.metric("Captured Glyphs", f"{captured_count} / {total_chars}")
-        m3.metric("Character Coverage", f"{coverage_pct}%")
+        m2.metric("Detected Template", detected_label)
+        m3.metric("Captured Glyphs", f"{captured_count} / {total_chars} ({coverage_pct}%)")
         m4.metric("Styles Generated", "Regular & Bold")
 
         if captured_count < total_chars:
             st.warning(
                 f"⚠️ **{total_chars - captured_count} character(s) were not detected.** "
                 "Check the **Inspect Extracted Pen Strokes** grid below. For missing letters, write slightly larger "
-                "(**50%–75%** of cell height) with a bolder black pen and verify all **4 corner markers** are 100% visible."
+                "(**50%–75%** of height) with a bolder black pen and verify all **4 corner markers** are 100% visible."
             )
 
         dl_reg, dl_bold = st.columns(2)
@@ -338,11 +377,10 @@ else:
             "🔄 Convert Existing PDF to My Font (Optional)",
         ])
 
-        # --- TAB 1: WRITE A NEW HANDWRITTEN LETTER ---
         with tab_write:
             l_col1, l_col2 = st.columns([1.1, 1.3])
             default_letter = (
-                f"**Date:** November 16, 2026\n\n"
+                f"**Date:** November 21, 2026\n\n"
                 f"**Dear Partner,**\n\n"
                 f"This letter is printed using my **custom enterprise handwriting font**. "
                 f"Both **Regular** and **Bold** styles are compiled directly from my own strokes.\n\n"
@@ -401,7 +439,6 @@ else:
                         key="dl_new_letter_pdf",
                     )
 
-        # --- TAB 2: OPTIONAL EXISTING PDF TO HANDWRITING CONVERTER ---
         with tab_convert:
             st.write(
                 "Upload any existing PDF document (typed in Arial, Times, Calibri, etc.) "
@@ -467,7 +504,6 @@ else:
 
         st.divider()
 
-        # Extracted Strokes Grid
         with st.expander("🔍 Inspect Extracted Pen Strokes", expanded=True):
             chars = list(glyph_masks.keys())
             cols_per_row = 11
